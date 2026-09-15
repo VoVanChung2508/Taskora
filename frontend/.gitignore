@@ -1,0 +1,22 @@
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+# Next.js
+.next/
+out/
+
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Build
+dist/
+build/
+
+# Logs
+*.log
