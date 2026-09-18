@@ -1,8 +1,5 @@
 """
-GDPR data export + account anonymisation — Python port of the Go
-`store.UserStore.ExportData` and `store.UserStore.AnonymiseAccount` methods.
-
-Uses asyncpg for database access.
+GDPR data export + account anonymisation.
 """
 
 from __future__ import annotations
@@ -16,13 +13,8 @@ import asyncpg
 
 
 class ExportError(Exception):
-    """Raised when a section of the GDPR export query fails."""
+    pass
 
-
-# ---------------------------------------------------------------------------
-# Domain model (minimal shape needed by ExportData; adjust to match your
-# actual `domain.User` / `UserStore.GetByID` return type)
-# ---------------------------------------------------------------------------
 
 @dataclass
 class UserProfile:
@@ -34,8 +26,6 @@ class UserProfile:
     last_login_at: Optional[datetime]
 
 
-# A section of the export: a JSON key and the query that produces its rows.
-# (Equivalent of the anonymous `struct{ key, query string }` slice in Go.)
 _EXPORT_SECTIONS: list[tuple[str, str]] = [
     (
         "workspaceMemberships",
@@ -109,31 +99,30 @@ _EXPORT_SECTIONS: list[tuple[str, str]] = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# UserStore
-# ---------------------------------------------------------------------------
-
 class UserStore:
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
 
     async def get_by_id(self, user_id: uuid.UUID) -> UserProfile:
-        """
-        Placeholder — not defined in the provided Go source (referenced as
-        `s.GetByID`). Implement to match your actual UserStore.GetByID.
-        """
-        raise NotImplementedError(
-            "get_by_id is referenced by export_data but was not defined in "
-            "the provided Go source — implement it to match UserStore.GetByID."
+        row = await self.pool.fetchrow(
+            """
+            SELECT id, email::text, display_name, is_active, created_at, last_login_at
+            FROM users WHERE id = $1
+            """,
+            user_id,
+        )
+        if row is None:
+            raise ExportError("user not found")
+        return UserProfile(
+            id=row["id"],
+            email=row["email"],
+            display_name=row["display_name"],
+            is_active=row["is_active"],
+            created_at=row["created_at"],
+            last_login_at=row["last_login_at"],
         )
 
     async def export_data(self, user_id: uuid.UUID) -> dict[str, Any]:
-        """
-        Collect every record tied to a user for a GDPR data export.
-
-        Values are returned as plain dicts so the JSON mirrors the database
-        rows without needing a type per table.
-        """
         out: dict[str, Any] = {
             "exportedAt": datetime.now(timezone.utc),
             "notice": (
@@ -156,30 +145,16 @@ class UserStore:
         for key, query in _EXPORT_SECTIONS:
             try:
                 rows = await self.pool.fetch(query, user_id)
-            except Exception as e:
-                raise ExportError(f"export {key}: {e}") from e
-
-            # Each row becomes a plain dict keyed by column name, mirroring
-            # the Go code's use of `rows.FieldDescriptions()` + `rows.Values()`.
-            items = [dict(row) for row in rows]
-            out[key] = items
+            except Exception as exc:
+                raise ExportError(f"export {key}: {exc}") from exc
+            out[key] = [dict(row) for row in rows]
 
         return out
 
     async def anonymise_account(self, user_id: uuid.UUID) -> None:
-        """
-        Scrub personal data while keeping project history intact.
-
-        Deleting the user row outright would cascade away tasks and
-        comments the team still needs, so instead the identity is replaced
-        with a placeholder and the account is deactivated. Authored content
-        stays, but is no longer attributable.
-        """
         async with self.pool.acquire() as conn:
             async with conn.transaction():
-                # Personal content that carries no project value is removed
-                # outright.
-                for q in (
+                for query in (
                     "DELETE FROM notifications WHERE user_id = $1",
                     "DELETE FROM user_sessions WHERE user_id = $1",
                     "DELETE FROM active_timers WHERE user_id = $1",
@@ -189,21 +164,17 @@ class UserStore:
                     "DELETE FROM project_members WHERE user_id = $1",
                     "DELETE FROM user_rates WHERE user_id = $1",
                 ):
-                    await conn.execute(q, user_id)
+                    await conn.execute(query, user_id)
 
-                # Detach authored content so history survives without
-                # naming the person.
-                for q in (
+                for query in (
                     "UPDATE tasks SET assignee_id = NULL WHERE assignee_id = $1",
                     "UPDATE tasks SET reporter_id = NULL WHERE reporter_id = $1",
                     "UPDATE comments SET author_id = NULL WHERE author_id = $1",
                     "UPDATE chat_messages SET author_id = NULL WHERE author_id = $1",
                     "UPDATE activity_events SET actor_id = NULL WHERE actor_id = $1",
                 ):
-                    await conn.execute(q, user_id)
+                    await conn.execute(query, user_id)
 
-                # Scrub the identity itself. The email is replaced with a
-                # unique placeholder so the UNIQUE constraint still holds.
                 placeholder = f"deleted-{str(user_id)[:8]}@anonymised.invalid"
                 await conn.execute(
                     """

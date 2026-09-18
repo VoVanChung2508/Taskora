@@ -1,9 +1,13 @@
+from __future__ import annotations
+
 import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 
 import asyncpg
+
+from .tasks import TASK_COLUMNS, Task, scan_task
 
 
 class NotFoundError(Exception):
@@ -22,31 +26,45 @@ class Comment:
 
 
 class TaskStore:
+    """
+    SCM-specific TaskStore mixin.
+
+    The aggregate TaskStore combines this with the core tasks.TaskStore.
+    """
+
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
 
     async def by_project_number(
-        self, project_id: uuid.UUID, number: str
-    ) -> "domain.Task":
-        """Finds a task by its human-readable number within a project
-        (the "12" in "SAP-12")."""
+        self,
+        project_id: uuid.UUID,
+        number: str,
+    ) -> Task:
         try:
-            n = int(number)
-        except ValueError:
-            raise NotFoundError
+            task_number = int(number)
+        except ValueError as exc:
+            raise NotFoundError from exc
 
         row = await self.pool.fetchrow(
-            f"SELECT {TASK_COLUMNS} FROM tasks WHERE project_id = $1 AND number = $2",
+            f"""
+            SELECT {TASK_COLUMNS}
+            FROM tasks
+            WHERE project_id = $1 AND number = $2
+            """,
             project_id,
-            n,
+            task_number,
         )
+
         if row is None:
             raise NotFoundError
+
         return scan_task(row)
 
-    async def add_system_comment(self, task_id: uuid.UUID, body: str) -> Comment:
-        """Posts a comment with no author, used for machine-generated
-        notes such as linked commits and pull requests."""
+    async def add_system_comment(
+        self,
+        task_id: uuid.UUID,
+        body: str,
+    ) -> Comment:
         row = await self.pool.fetchrow(
             """
             INSERT INTO comments (task_id, author_id, body)
@@ -57,12 +75,15 @@ class TaskStore:
             body,
         )
 
-        c = Comment(
+        if row is None:
+            raise NotFoundError
+
+        comment = Comment(
             id=row["id"],
             task_id=row["task_id"],
             author_id=row["author_id"],
             body=row["body"],
             created_at=row["created_at"],
         )
-        c.author_name = "Flowie Bot"
-        return c
+        comment.author_name = "Flowie Bot"
+        return comment

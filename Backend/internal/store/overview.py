@@ -14,6 +14,8 @@ from typing import Optional
 
 import asyncpg
 
+from .stats import ProjectStats, TaskStore as StatsTaskStore
+
 
 # ---------------------------------------------------------------------------
 # pctDelta
@@ -100,21 +102,7 @@ class AssigneeLoad:
 
 
 @dataclass
-class ProjectStats:
-    """Placeholder shape for the base stats returned by `TaskStore.project_stats`.
-
-    Not defined in the provided Go source — extend with whatever fields your
-    `ProjectStats` actually carries (Total, Done, etc.), since
-    `ProjectOverview` embeds it.
-    """
-
-    # Adjust to match the real ProjectStats fields.
-    pass
-
-
-@dataclass
-class ProjectOverview:
-    project_stats: ProjectStats
+class ProjectOverview(ProjectStats):
     trend: list[TrendPoint] = field(default_factory=list)
     assignees: list[AssigneeLoad] = field(default_factory=list)
     status_meta: list[StatusMeta] = field(default_factory=list)
@@ -384,7 +372,16 @@ class TaskStore:
     ) -> ProjectOverview:
         """Extend project_stats with trend and per-assignee load."""
         base = await self.project_stats(project_id)
-        o = ProjectOverview(project_stats=base)
+        o = ProjectOverview(
+            by_status=dict(base.by_status),
+            by_priority=dict(base.by_priority),
+            total=base.total,
+            done=base.done,
+            story_points_total=base.story_points_total,
+            story_points_done=base.story_points_done,
+            hours_logged=base.hours_logged,
+            cost_actual=base.cost_actual,
+        )
 
         row = await self.pool.fetchrow(
             """

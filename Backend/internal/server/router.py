@@ -6,14 +6,16 @@ thành một ứng dụng FastAPI (tương đương bản Go dùng chi router).
 from __future__ import annotations
 
 import time
-from typing import Awaitable, Callable
+from typing import Callable
 
 from fastapi import APIRouter, Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 
-from . import auth, config, handlers
+from ..auth.session import SessionManager
+from ..config.config import Config
+from ..handlers.handlers import Handlers
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -107,7 +109,7 @@ class RateLimitByIPMiddleware(BaseHTTPMiddleware):
 # Khởi tạo ứng dụng / router
 # ──────────────────────────────────────────────────────────────────────────
 
-def new_app(cfg: "config.Config", h: "handlers.Handlers", sm: "auth.SessionManager") -> FastAPI:
+def new_app(cfg: Config, h: Handlers, sm: SessionManager) -> FastAPI:
     """Xây dựng ứng dụng FastAPI với toàn bộ route và middleware."""
 
     app = FastAPI()
