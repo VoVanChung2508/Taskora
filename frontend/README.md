@@ -6,12 +6,16 @@ REST và dùng session cookie (httpOnly) do luồng Azure AD SSO cấp.
 ## Chạy dev
 
 ```bash
-cp .env.local.example .env.local   # trỏ NEXT_PUBLIC_API_BASE tới backend
+cp .env.local.example .env.local
 npm install
-npm run dev                        # http://localhost:3000
+npm run dev                        # http://localhost:3000 hoặc http://YOUR_LAN_IP:3000
 ```
 
-Backend phải chạy ở `http://localhost:8080` (xem `../backend`). Đăng nhập cần
+Frontend và backend đều bind `0.0.0.0`, vì vậy thiết bị khác trong cùng mạng
+LAN có thể truy cập bằng IP LAN của máy chủ, ví dụ `http://192.168.1.23:3000`.
+Backend chạy ở port `8081` (xem `../Backend`). Khi mở frontend qua LAN,
+API client tự đổi `localhost:8081` thành hostname hiện tại, ví dụ
+`192.168.1.23:8081`. Đăng nhập cần
 Azure AD được cấu hình ở backend (xem `../docs/azure-sharepoint-setup.md`).
 
 ## Cấu trúc

@@ -2,8 +2,38 @@
 // session cookie (credentials: "include") so the httpOnly Azure AD session is
 // used. Domain modules (tasks, projects, …) build on top of `request`.
 
-export const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8080";
+const DEFAULT_API_PORT = process.env.NEXT_PUBLIC_API_PORT || "8081";
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1"]);
+
+function isLoopbackHost(hostname: string) {
+  return LOOPBACK_HOSTS.has(hostname.toLowerCase());
+}
+
+function resolveApiBase(rawBase: string | undefined) {
+  const configuredBase = rawBase?.trim();
+  const fallbackBase =
+    typeof window === "undefined"
+      ? `http://localhost:${DEFAULT_API_PORT}`
+      : `${window.location.protocol}//${window.location.hostname}:${DEFAULT_API_PORT}`;
+  const base = configuredBase || fallbackBase;
+
+  try {
+    const url = new URL(base);
+
+    if (typeof window !== "undefined") {
+      const pageHost = window.location.hostname;
+      if (isLoopbackHost(url.hostname) && !isLoopbackHost(pageHost)) {
+        url.hostname = pageHost;
+      }
+    }
+
+    return url.origin;
+  } catch {
+    return base.replace(/\/+$/, "");
+  }
+}
+
+export const API_BASE = resolveApiBase(process.env.NEXT_PUBLIC_API_BASE);
 
 export class ApiError extends Error {
   status: number;

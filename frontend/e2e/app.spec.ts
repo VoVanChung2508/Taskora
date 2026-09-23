@@ -8,7 +8,7 @@ import { test, expect, Page } from "@playwright/test";
  * running so the suite stays useful in a frontend-only checkout.
  */
 
-const API = process.env.E2E_API_BASE || "http://localhost:8080";
+const API = process.env.E2E_API_BASE || "http://localhost:8081";
 
 /** True when the backend is reachable. */
 async function apiUp(page: Page): Promise<boolean> {

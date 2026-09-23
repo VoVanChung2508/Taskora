@@ -61,8 +61,8 @@ export default function AcceptInvitePage() {
             <p className="text-body-sm text-on-surface-variant mt-1 mb-lg">
               Hãy đăng nhập bằng đúng email đã được mời, rồi mở lại liên kết này.
             </p>
-            <a className="btn-primary w-full" href={api.loginUrl()}>
-              Đăng nhập với Microsoft
+            <a className="btn-primary w-full" href="/login">
+              Đăng nhập
             </a>
           </>
         )}

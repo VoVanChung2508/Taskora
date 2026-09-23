@@ -176,6 +176,8 @@ from .auth_handler import (
     azure_login,
     azure_callback,
     dev_login,
+    login,
+    register,
     logout,
     list_sessions,
     revoke_session,
@@ -448,6 +450,8 @@ class Handlers:
     azure_login = azure_login
     azure_callback = azure_callback
     dev_login = dev_login
+    login = login
+    register = register
     logout = logout
     me = me
     record_session = record_session

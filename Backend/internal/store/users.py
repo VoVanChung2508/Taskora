@@ -12,7 +12,7 @@ class NotFoundError(Exception):
 
 
 USER_COLUMNS = (
-    "id, azure_oid, email, display_name, avatar_url, is_system_admin, "
+    "id, azure_oid, email, display_name, avatar_url, password_hash, is_system_admin, "
     "is_active, last_login_at, created_at, updated_at"
 )
 
@@ -24,6 +24,7 @@ class User:
     email: str
     display_name: str
     avatar_url: str
+    password_hash: str
     is_system_admin: bool
     is_active: bool
     last_login_at: Optional[datetime]
@@ -40,6 +41,7 @@ def scan_user(row: Optional[asyncpg.Record]) -> User:
         email=row["email"],
         display_name=row["display_name"],
         avatar_url=row["avatar_url"],
+        password_hash=row["password_hash"],
         is_system_admin=row["is_system_admin"],
         is_active=row["is_active"],
         last_login_at=row["last_login_at"],
@@ -53,6 +55,44 @@ class UserStore:
 
     def __init__(self, pool: asyncpg.Pool):
         self.pool = pool
+
+    async def create_local(
+        self,
+        email: str,
+        display_name: str,
+        password_hash: str,
+        is_admin: bool,
+    ) -> User:
+        row = await self.pool.fetchrow(
+            f"""
+            INSERT INTO users (email, display_name, password_hash, is_system_admin, last_login_at)
+            VALUES ($1, $2, $3, $4, now())
+            RETURNING {USER_COLUMNS}
+            """,
+            email,
+            display_name,
+            password_hash,
+            is_admin,
+        )
+        return scan_user(row)
+
+    async def get_by_email(self, email: str) -> User:
+        row = await self.pool.fetchrow(
+            f"SELECT {USER_COLUMNS} FROM users WHERE email = $1 AND is_active = TRUE",
+            email,
+        )
+        return scan_user(row)
+
+    async def set_last_login(self, user_id: uuid.UUID) -> User:
+        row = await self.pool.fetchrow(
+            f"""
+            UPDATE users SET last_login_at = now(), updated_at = now()
+            WHERE id = $1
+            RETURNING {USER_COLUMNS}
+            """,
+            user_id,
+        )
+        return scan_user(row)
 
     async def upsert_from_azure(
         self,

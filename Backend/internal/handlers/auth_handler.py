@@ -13,6 +13,7 @@ from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from ..auth.session import get_user_id
+from ..auth.passwords import hash_password, verify_password
 from ..store.sessions import mark_current
 from ..store.audit import (
     AUDIT_LOGIN,
@@ -26,6 +27,28 @@ if TYPE_CHECKING:
 
 SESSION_COOKIE = "flowie_session"
 FLOW_COOKIE_TTL = 10 * 60
+
+
+def _local_password_error():
+    raise HTTPException(
+        status_code=400,
+        detail={"error": "invalid_credentials", "message": "Email hoặc mật khẩu không hợp lệ"},
+    )
+
+
+def _public_user(user):
+    return {
+        "id": user.id,
+        "azureOid": user.azure_oid,
+        "email": user.email,
+        "displayName": user.display_name,
+        "avatarUrl": user.avatar_url,
+        "isSystemAdmin": user.is_system_admin,
+        "isActive": user.is_active,
+        "lastLoginAt": user.last_login_at,
+        "createdAt": user.created_at,
+        "updatedAt": user.updated_at,
+    }
 
 
 def _cfg(self: "Handlers", snake: str, camel: str | None = None, default=None):
@@ -486,6 +509,60 @@ async def dev_login(self: "Handlers", request: Request):
     return response
 
 
+async def register(self: "Handlers", request: Request):
+    payload = await request.json()
+    email = str(payload.get("email", "")).strip().lower()
+    password = str(payload.get("password", ""))
+    display_name = str(payload.get("displayName", payload.get("display_name", ""))).strip()
+    if "@" not in email or len(email) > 320 or len(password) < 8 or len(password) > 128:
+        raise HTTPException(
+            status_code=400,
+            detail={"error": "invalid_registration", "message": "Email hợp lệ và mật khẩu dài tối thiểu 8 ký tự"},
+        )
+    if not display_name:
+        display_name = email.split("@", 1)[0]
+    admin_emails = _cfg(self, "system_admin_emails", "SystemAdminEmails", []) or []
+    try:
+        user = await self.store.users.create_local(
+            email, display_name, hash_password(password),
+            any(str(item).lower() == email for item in admin_emails),
+        )
+    except Exception as exc:
+        if "duplicate" in str(exc).lower() or "unique" in str(exc).lower():
+            raise HTTPException(status_code=409, detail={"error": "email_exists", "message": "Email đã được đăng ký"}) from exc
+        raise HTTPException(status_code=500, detail={"error": "registration_failed", "message": str(exc)}) from exc
+    await ensure_development_workspace(self, user)
+    token = await _issue_session(self, user)
+    response = JSONResponse(content=jsonable_encoder(_public_user(user)))
+    _set_session_cookie(self, response, token)
+    await record_session(self, request, user.id, token)
+    return response
+
+
+async def login(self: "Handlers", request: Request):
+    payload = await request.json()
+    email = str(payload.get("email", "")).strip().lower()
+    password = str(payload.get("password", ""))
+    try:
+        user = await self.store.users.get_by_email(email)
+    except Exception:
+        _local_password_error()
+    if not verify_password(password, user.password_hash):
+        _local_password_error()
+    user = await self.store.users.set_last_login(user.id)
+    state = await self.store.users.two_factor(user.id)
+    if state is not None and state.enabled:
+        token = await _issue_session(self, user, pending=True)
+        response = JSONResponse({"mfaRequired": True})
+    else:
+        await ensure_development_workspace(self, user)
+        token = await _issue_session(self, user)
+        response = JSONResponse(content=jsonable_encoder(_public_user(user)))
+        await record_session(self, request, user.id, token)
+    _set_session_cookie(self, response, token)
+    return response
+
+
 async def logout(self: "Handlers", request: Request):
     token = token_from_request(request)
     if token:
@@ -584,7 +661,7 @@ async def dev_make_admin(self: "Handlers") -> dict:
 async def me(self: "Handlers"):
     user_id = _current_user_id()
     try:
-        return await self.store.users.get_by_id(user_id)
+        return _public_user(await self.store.users.get_by_id(user_id))
     except Exception as exc:
         raise HTTPException(
             status_code=404,

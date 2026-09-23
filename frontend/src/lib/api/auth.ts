@@ -3,7 +3,10 @@ import { API_BASE, request } from "./client";
 import type { User, UserSession } from "@/types/models";
 
 export const authApi = {
-  loginUrl: () => `${API_BASE}/api/v1/auth/azure/login`,
+  login: (email: string, password: string) =>
+    request<User>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+  register: (email: string, password: string, displayName: string) =>
+    request<User>("/auth/register", { method: "POST", body: JSON.stringify({ email, password, displayName }) }),
   logout: () => request<void>("/auth/logout", { method: "POST" }),
   me: () => request<User>("/me"),
   devMakeAdmin: () => request<void>("/dev-make-admin", { method: "POST" }),

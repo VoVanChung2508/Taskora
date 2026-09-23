@@ -60,8 +60,8 @@ class Config:
     """All runtime configuration for the API server."""
 
     env: str = "development"
-    port: str = "8080"
-    base_url: str = "http://localhost:8080"
+    port: str = "8081"
+    base_url: str = "http://localhost:8081"
     frontend_url: str = "http://localhost:3000"
 
     database_url: str = ""
@@ -93,8 +93,8 @@ def load() -> Config:
 
     cfg = Config(
         env=_get_env("APP_ENV", "development"),
-        port=_get_env("APP_PORT", "8080"),
-        base_url=_get_env("APP_BASE_URL", "http://localhost:8080"),
+        port=_get_env("APP_PORT", "8081"),
+        base_url=_get_env("APP_BASE_URL", "http://localhost:8081"),
         frontend_url=_get_env("FRONTEND_URL", "http://localhost:3000"),
         database_url=_get_env("DATABASE_URL", ""),
         session_secret=_get_env("SESSION_SECRET", ""),

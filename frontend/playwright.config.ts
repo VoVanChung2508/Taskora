@@ -4,7 +4,7 @@ import { defineConfig, devices } from "@playwright/test";
  * End-to-end configuration.
  *
  * The dev server is started automatically. The backend is expected to be
- * running separately (E2E_API_BASE, default http://localhost:8080) because it
+ * running separately (E2E_API_BASE, default http://localhost:8081) because it
  * needs a database; tests that require the API skip themselves when it is
  * unreachable, so `npm run e2e` still works with only the frontend up.
  */

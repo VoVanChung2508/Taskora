@@ -124,14 +124,23 @@ def new_app(cfg: Config, h: Handlers, sm: SessionManager) -> FastAPI:
         timeout_seconds=30,
         skip=lambda request: is_streaming_path(request.url.path),
     )
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=[cfg.frontend_url],
-        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-        allow_headers=["Accept", "Authorization", "Content-Type"],
-        allow_credentials=True,
-        max_age=300,
-    )
+    cors_options = {
+        "allow_origins": [cfg.frontend_url],
+        "allow_methods": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        "allow_headers": ["Accept", "Authorization", "Content-Type"],
+        "allow_credentials": True,
+        "max_age": 300,
+    }
+    if is_dev:
+        cors_options["allow_origin_regex"] = (
+            r"^https?://("
+            r"localhost|127\.0\.0\.1|0\.0\.0\.0|"
+            r"10(?:\.\d{1,3}){3}|"
+            r"192\.168(?:\.\d{1,3}){2}|"
+            r"172\.(?:1[6-9]|2\d|3[0-1])(?:\.\d{1,3}){2}"
+            r")(?::\d{1,5})?$"
+        )
+    app.add_middleware(CORSMiddleware, **cors_options)
 
     app.add_api_route("/healthz", h.health, methods=["GET"])
 
@@ -164,6 +173,8 @@ def new_app(cfg: Config, h: Handlers, sm: SessionManager) -> FastAPI:
     auth_router = APIRouter(prefix="/auth")
     auth_router.add_api_route("/azure/login", h.azure_login, methods=["GET"])
     auth_router.add_api_route("/azure/callback", h.azure_callback, methods=["GET"])
+    auth_router.add_api_route("/register", h.register, methods=["POST"])
+    auth_router.add_api_route("/login", h.login, methods=["POST"])
     auth_router.add_api_route("/logout", h.logout, methods=["POST"])
     # Hoàn tất thử thách MFA; tự đọc token đang chờ vì RequireAuth từ chối
     # các session mới xác thực một nửa.

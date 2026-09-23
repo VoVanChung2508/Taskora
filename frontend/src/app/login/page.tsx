@@ -1,16 +1,38 @@
 "use client";
 
-import { useEffect } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   // Nếu đã đăng nhập thì chuyển thẳng vào dashboard.
   useEffect(() => {
     api.me().then(() => router.replace("/")).catch(() => {});
   }, [router]);
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError("");
+    setLoading(true);
+    try {
+      const result = await api.login(email, password);
+      if ("mfaRequired" in result) {
+        router.push("/login/2fa");
+      } else {
+        router.replace("/");
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Đăng nhập thất bại");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="min-h-screen flex w-full bg-white">
@@ -23,22 +45,18 @@ export default function LoginPage() {
             <p className="text-gray-500 text-[15px]">Nền tảng quản lý dự án doanh nghiệp Flowie</p>
           </div>
 
-          {/* Login Button */}
-          <a href={api.loginUrl()} className="block w-full">
-            <button className="w-full flex items-center justify-center gap-3 px-4 py-3.5 border border-gray-200 rounded-xl text-gray-700 font-semibold hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 21 21">
-                <rect x="1" y="1" width="9" height="9" fill="#f25022" />
-                <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
-                <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
-                <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
-              </svg>
-              Đăng nhập với Microsoft
+          <form onSubmit={submit} className="space-y-4">
+            <input required type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="Email" className="w-full rounded-xl border border-gray-200 px-4 py-3.5 outline-none focus:border-blue-500" />
+            <input required minLength={8} type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Mật khẩu" className="w-full rounded-xl border border-gray-200 px-4 py-3.5 outline-none focus:border-blue-500" />
+            {error && <p className="text-sm text-red-600">{error}</p>}
+            <button disabled={loading} type="submit" className="w-full rounded-xl bg-blue-600 px-4 py-3.5 font-semibold text-white transition hover:bg-blue-700 disabled:opacity-60">
+              {loading ? "Đang đăng nhập..." : "Đăng nhập"}
             </button>
-          </a>
+          </form>
 
           {/* Footer Note */}
           <p className="text-center text-gray-400 text-[13px] mt-8">
-            Hệ thống chỉ hỗ trợ xác thực qua hệ sinh thái Azure Active Directory nội bộ.
+            Đăng nhập bằng tài khoản Flowie của bạn.
           </p>
         </div>
       </div>
